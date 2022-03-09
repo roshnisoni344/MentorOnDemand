@@ -1,0 +1,24 @@
+.text-style-negative {
+    border: 2px solid red;
+    color: red;
+}
+
+.text-style-positive {
+    border: 2px solid green;
+    color: green;
+}
+
+.text-alignment {
+    text-align: right;
+}
+
+#quantity {
+    text-align: center;
+}
+
+.currency:after
+{ content: '€'; }
+
+.btn-height{
+    height: 2em;
+}
