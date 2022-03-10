@@ -1,4 +1,6 @@
+import { CurrencyPipe, formatCurrency, getCurrencySymbol } from '@angular/common';
 import { Component, Input, OnInit } from '@angular/core';
+import { MycurrencyPipe } from './mycurrencypipe';
 
 @Component({
   selector: 'app-cal',
@@ -7,18 +9,28 @@ import { Component, Input, OnInit } from '@angular/core';
 })
 export class CalComponent implements OnInit {
 
-  @Input() value1 : number = 0;
-    @Input() value2 : number = 0;
+  @Input() value1 : any;
+    @Input() value2 : any;
     result1 : number = 0 ;
     result2 : number = 0;
     quantity : number =1;
     decreaseFlag : boolean = false;
-  constructor() { }
+    value1Temp : string | undefined | null ;
+    value2Temp : string | undefined | null ;
+    result1Temp : string | undefined | null ;
+    result2Temp : string | undefined | null ;
+    
+  constructor( ) { }
+  
 
   ngOnInit(): void {
     this.value1 = 12;
     this.value2 = 4;
     this.result1 = this.value1 * this.quantity;
+    this.value1Temp = this.transform( this.value1);
+    this.value2Temp = this.transform( this.value2, 'EUR', 'symbol' , '1.2');
+    this.result1Temp = this.transform( this.result1, 'EUR', 'symbol' , '1.2');
+    this.result2Temp = this.transform( this.result2, 'EUR', 'symbol' , '1.2');
   }
 
   decreaseQuantity(){
@@ -30,6 +42,8 @@ export class CalComponent implements OnInit {
     }
     this.result1 = this.value1 * this.quantity;
     this.result2 = this.result1 - this.value2;
+    this.result1Temp = this.transform( this.result1, 'EUR', 'symbol' , '1.2');
+    this.result2Temp = this.transform( this.result2, 'EUR', 'symbol' , '1.2');
 }
 
 increaseQuantity(){
@@ -37,6 +51,28 @@ increaseQuantity(){
    this.quantity = this.quantity + 1;
    this.result1 = this.value1 * this.quantity;
    this.result2 = this.result1 - this.value2;
+   this.result1Temp = this.transform( this.result1, 'EUR', 'symbol' , '1.2');
+   this.result2Temp = this.transform( this.result2, 'EUR', 'symbol' , '1.2');
 }
 
+transform(
+  value: number,
+  currencyCode: string = 'EUR',
+  display:
+      | 'code'
+      | 'symbol'
+      | 'symbol-narrow'
+      | string
+      | boolean = 'symbol',
+  digitsInfo: string = '3.2-2',
+  locale: string = 'fr',
+): string | null {
+  return formatCurrency(
+    value,
+    locale,
+    getCurrencySymbol(currencyCode, 'wide'),
+    currencyCode,
+    digitsInfo,
+  );
+}
 }
