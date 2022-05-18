@@ -1,0 +1,475 @@
+JAXB - XSD to Java Map/HashMap example using xjc, bindings and XmlAdapter
+I’ve been assigned the task of implementing for my specific product team a common RESTful API that is invoked as part of a cloud on-boarding process.  The spec provided to me describes the data structures comprising the request and responses – all of which will be encoded in JSON.  In an ideal world, I would leverage something like JAX-RS (using something like Jersey RI). But, alas, that would be too easy.  Instead I must host this API somehow on top of my product’s existing service-based architecture framework.  I went searching around for a JAXB equivalent for JSON – that would allow some type of JSON to Java binding. I was hoping I would find some type of JSON schema definition concept, an xjc and schemgen equivalent etc.  I came up short on my search for such tools, but I did discover that Jackson and Jersey can support de/serialization from/to JSON of Java objects that are annotated using JAXB (java.xml.bind.annotation). This was a welcome discovery and it meant I could set about trying to model the specification’s data structures with XSD.
+
+My plan was to create the XML schema up front, and then leverage xjc to create the set of JAXB-annotated Java classes that map to the elements/types defined in the schema.  Everything was coming along nicely.  Whenever I got stuck on the XSD front, I would simply try and model the concept using some basic java classes, then fire up the schemagen tool to view the schema it generated, and incorporate the techniques/result back in to my own XSD. I completed the XSD, and invoked xjc and out came my auto-generated JAXB-annotated classes.  However, some of the classes and properties were not what I was expecting.  Where had my java.util.Map based properties gone?
+
+If you take a simple sample like the following – a Person object with a map property of all their worldly gadgets (iPad/iPhones etc):
+
+Person.java
+
+import java.util.Map;
+
+public class Person
+{
+  private String name;
+  private Map<String, Gadget> gadgets;
+
+  public void setName(String name)
+  {
+    this.name = name;
+  }
+
+  public String getName()
+  {
+    return name;
+  }
+
+  public void setGadgets(Map<String, Gadget> gadgets)
+  {
+    this.gadgets = gadgets;
+  }
+
+  public Map<String, Gadget> getGadgets()
+  {
+    return gadgets;
+  }
+}
+
+Gadget.java
+
+public class Gadget
+{
+  private String make;
+
+  public void setMake(String make)
+  {
+    this.make = make;
+  }
+
+  public String getMake()
+  {
+    return make;
+  }
+}
+
+Running schemagen on the above, you get the following schema:
+
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xs:schema version="1.0" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <xs:complexType name="gadget">
+    <xs:sequence>
+      <xs:element name="make" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="person">
+    <xs:sequence>
+      <xs:element name="gadgets">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="entry" minOccurs="0" maxOccurs="unbounded">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="key" minOccurs="0" type="xs:string"/>
+                  <xs:element name="value" minOccurs="0" type="gadget"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="name" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>
+
+If I then feed the above schema back to xjc, the JAXB-annotated classes that get generated look like the following (javadoc removed to save on space):
+
+Person.java
+
+import java.util.ArrayList;
+import java.util.List;
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlType;
+
+@XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(name = "person", propOrder = {
+    "gadgets",
+    "name"
+})
+public class Person {
+
+    @XmlElement(required = true)
+    protected Person.Gadgets gadgets;
+    protected String name;
+
+    public Person.Gadgets getGadgets() {
+        return gadgets;
+    }
+
+    public void setGadgets(Person.Gadgets value) {
+        this.gadgets = value;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String value) {
+        this.name = value;
+    }
+
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    @XmlType(name = "", propOrder = {
+        "entry"
+    })
+    public static class Gadgets {
+
+        protected List<Person.Gadgets.Entry> entry;
+
+        public List<Person.Gadgets.Entry> getEntry() {
+            if (entry == null) {
+                entry = new ArrayList<Person.Gadgets.Entry>();
+            }
+            return this.entry;
+        }
+
+        @XmlAccessorType(XmlAccessType.FIELD)
+        @XmlType(name = "", propOrder = {
+            "key",
+            "value"
+        })
+        public static class Entry {
+
+            protected String key;
+            protected Gadget value;
+
+            public String getKey() {
+                return key;
+            }
+
+            public void setKey(String value) {
+                this.key = value;
+            }
+
+            public Gadget getValue() {
+                return value;
+            }
+
+            public void setValue(Gadget value) {
+                this.value = value;
+            }
+
+        }
+
+    }
+
+}
+
+Gadget.java
+
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlType;
+
+@XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(name = "gadget", propOrder = {
+    "make"
+})
+public class Gadget {
+
+    protected String make;
+
+    public String getMake() {
+        return make;
+    }
+
+    public void setMake(String value) {
+        this.make = value;
+    }
+}
+
+As can be seen above in the generated Person class, the Map was not reinstated. Instead a new Person.Gadgets class was created containing a list of the new Person.Gadgets.Entry class. To be fair, the xjc tool treated the schema at face value.  How was it to know that this structure should be modelled by a Map.  Ideally, it would be nice if only a few instructions in a bindings file (supplied to xjc tool along with the schema file) were sufficient to auto-generate all required JAXB-annotated classes with full Map support.  Unfortunately this is not the case. Instead a bindings file must be created that targets appropriate elements in the schema and overrides their baseType with a fully-qualified custom Map subclass.  Custom java files must be hand-created for the Map subclass, and also an XmlAdapter subclass which contains the logic to unmarshal/marshal to/from the Map subclass.
+
+What proceeds is a fully-worked example based on the Person / Gadget scenario above that restores Map support for set/getGadgets() methods of the Person class. It also has a few extra features thrown in including subclassing of Gadget. Credit for this technique must go to Aaron Anderson @ adventuresintechology.blogspot.com.
+
+First, the xml schema.
+
+schema.xsd
+
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified"
+targetNamespace="http://todayguesswhat.blogspot.com/test" xmlns:test="http://todayguesswhat.blogspot.com/test">
+
+<xs:element name="Person">
+  <xs:complexType>
+   <xs:sequence>
+    <xs:element name="name" type="xs:string"/>
+    <xs:element name="gadgets" type="test:GadgetMapModeller" minOccurs="0"/>
+   </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:complexType name="GadgetMapModeller">
+  <xs:sequence>
+    <xs:element name="entry" minOccurs="0" maxOccurs="unbounded">
+     <xs:complexType>
+      <xs:sequence>
+        <xs:element name="key" type="xs:string"/>
+        <xs:element name="value" type="test:Gadget"/>
+      </xs:sequence>
+     </xs:complexType>
+   </xs:element>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="Gadget">
+  <xs:sequence>
+   <xs:element name="make" type="xs:string"/>
+   <xs:element name="model" type="xs:string"/>
+   <xs:element name="year" type="xs:int"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="Computer">
+  <xs:complexContent>
+   <xs:extension base="test:Gadget">
+    <xs:sequence>
+     <xs:element name="speed" type="xs:int"/>
+     <xs:element name="cpu" type="xs:string"/>
+    </xs:sequence>
+   </xs:extension>
+  </xs:complexContent>
+</xs:complexType>
+
+</xs:schema>
+
+The important bindings file that overrides the generated type of the gadgets element to the new Map subclass – GadgetMap<String, Gadget>
+
+bindings.xml
+
+<jaxb:bindings xmlns:jaxb="http://java.sun.com/xml/ns/jaxb" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.1">
+
+<jaxb:bindings schemaLocation="schema.xsd">
+ 
+  <jaxb:bindings node="//xs:element[@name='Person']//xs:element[@name='gadgets']">
+   <jaxb:property>
+    <jaxb:baseType name="com.blogspot.todayguesswhat.test.model.GadgetMap&lt;String,Gadget&gt;" />
+   </jaxb:property>
+  </jaxb:bindings>
+
+</jaxb:bindings>
+
+</jaxb:bindings>
+
+The new Map subclass with XmlJavaTypeAdapter JAXB annotation defining the name of the adapter for unmarshalling/marshalling  to/from this type.
+
+GadgetMap.java
+
+package com.blogspot.todayguesswhat.test.model;
+
+import java.util.HashMap;
+
+import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+
+@XmlJavaTypeAdapter(GadgetMapAdapter.class)
+public class GadgetMap<String,Gadget> extends HashMap<String,Gadget>
+{
+}
+
+The XmlAdapter that does the important conversion from one type to another:
+
+GadgetMapAdapter.java
+
+package com.blogspot.todayguesswhat.test.model;
+
+import java.util.Map;
+
+import javax.xml.bind.annotation.adapters.XmlAdapter;
+
+public class GadgetMapAdapter extends XmlAdapter<GadgetMapModeller, GadgetMap<String,Gadget>>
+{
+  @Override
+  public GadgetMap<String,Gadget> unmarshal(GadgetMapModeller modeller)
+  {
+    GadgetMap<String,Gadget> map = new GadgetMap<String,Gadget>();
+    for (GadgetMapModeller.Entry e : modeller.getEntry())
+    {
+      map.put(e.getKey(), e.getValue());
+    }
+    return map;
+  }
+
+  @Override
+  public GadgetMapModeller marshal(GadgetMap<String,Gadget> map)
+  {
+    GadgetMapModeller modeller = new GadgetMapModeller();
+    for (Map.Entry<String,Gadget> entry : map.entrySet())
+    {
+      GadgetMapModeller.Entry e = new GadgetMapModeller.Entry();
+      e.setKey(entry.getKey());
+      e.setValue(entry.getValue());
+      modeller.getEntry().add(e);
+    }
+    return modeller;
+  }
+}
+
+A few test classes.
+
+MarshalTest.java
+
+package com.blogspot.todayguesswhat.test.model;
+ 
+import java.util.List;
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Marshaller;
+ 
+public class MarshalTest
+{
+  public static void main(String[] args) throws Exception
+  {
+    JAXBContext jc = JAXBContext.newInstance(Person.class);
+    ObjectFactory factory = new ObjectFactory();
+
+    Person person = factory.createPerson();
+    person.setName("Matt Shannon");
+
+    GadgetMap<String, Gadget> map = new GadgetMap<String, Gadget>();
+
+    Gadget gadget1 = new Gadget();
+    gadget1.setMake("Apple");
+    gadget1.setModel("iPod");
+    gadget1.setYear(2002);
+
+    Computer gadget2 = new Computer();
+    gadget2.setMake("Lenovo");
+    gadget2.setModel("Thinkpad X230");
+    gadget2.setYear(2012);
+    gadget2.setCpu("Intel i5-3320M");
+    gadget2.setSpeed(2600);
+
+    map.put("my ipad", gadget1);
+    map.put("my laptop", gadget2);
+
+    person.setGadgets(map);
+
+    Marshaller marshaller = jc.createMarshaller();
+    marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+    marshaller.marshal(person, System.out);
+  }
+}
+
+UnmarshalTest.java
+
+package com.blogspot.todayguesswhat.test.model;
+ 
+import java.io.File;
+
+import java.util.Map;
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Unmarshaller;
+ 
+public class UnmarshalTest
+{
+  public static void main(String[] args) throws Exception
+  {
+    JAXBContext jc = JAXBContext.newInstance(Person.class);
+
+    Unmarshaller u = jc.createUnmarshaller();
+
+    Person person = (Person) u.unmarshal(new File(args[0]));
+    logPerson(person);
+  }
+
+  public static void logPerson(Person p)
+  {
+    if (p != null)
+    {
+      System.out.println("Person [name=" + p.getName() + "]");
+      GadgetMap<String, Gadget> map = p.getGadgets();
+      if (map != null)
+      {
+        for (Map.Entry<String,Gadget> entry : map.entrySet())
+        {
+          Gadget g = entry.getValue();
+          System.out.println("   " + entry.getKey() + " : " + gadgetToString(g));
+        }
+      }
+    }
+  }
+
+  public static String gadgetToString(Gadget g)
+  {
+    String result = null;
+    if (g != null)
+    {
+      result = "[make="+g.getMake()+"][model="+g.getModel()+"][year="+g.getYear()+"]";
+      if (g instanceof Computer)
+      {
+        Computer c = (Computer) g;
+        result = result + "[cpu="+c.getCpu()+"][speed="+c.getSpeed()+"]";
+      }
+    }
+    return result;
+  }
+}
+
+An XML file leveraged by the unmarshalling test
+
+person.xml
+
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Person xmlns="http://todayguesswhat.blogspot.com/test">
+    <name>Louise</name>
+    <gadgets>
+        <entry>
+            <key>work laptop</key>
+            <value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Computer">
+                <make>Lenovo</make>
+                <model>Thinkpad X120e</model>
+                <year>2011</year>
+                <speed>1600</speed>
+                <cpu>AMD E-350</cpu>
+            </value>
+        </entry>
+        <entry>
+            <key>my phone</key>
+            <value>
+                <make>Apple</make>
+                <model>iPhone 3g</model>
+                <year>2008</year>
+            </value>
+        </entry>
+    </gadgets>
+</Person>
+
+And some windows bat files to invoke the various commands
+
+clean.bat
+
+@ECHO off
+SET PROJECT_GENSRC=%~dp0\gensrc
+IF EXIST "%PROJECT_GENSRC%" RMDIR /s /q "%PROJECT_GENSRC%"
+SET PROJECT_JAVADOC=%~dp0\javadoc
+IF EXIST "%PROJECT_JAVADOC%" RMDIR /s /q "%PROJECT_JAVADOC%"
+SET PROJECT_CLASSES=%~dp0\classes
+IF EXIST "%PROJECT_CLASSES%" RMDIR /s /q "%PROJECT_CLASSES%"
+pause.
+
+jaxb.bat
+
+@ECHO off
+SET JAVA_HOME=C:\Oracle\Middleware\jdk160_24
+SET JAXBCMD=%JAVA_HOME%\bin\xjc.exe
+SET PROJECT_GENSRC=%~dp0\gensrc
+IF EXIST "%PROJECT_GENSRC%" RMDIR /s /q "%PROJECT_GENSRC%"
+MKDIR "%PROJECT_GENSRC%"
+"%JAXBCMD%" -no-header -d "%PROJECT_GENSRC%" -p com.blogspot.todayguesswhat.test.model -xmlschema "%~dp0\schema.xsd" -b "%~dp0\bindings.xml"
+pause.
