@@ -1,15 +1,20 @@
-import { Component, OnInit } from "@angular/core";
+import { Component, Input, OnInit } from "@angular/core";
 
 @Component({
 selector: "my-app",
 templateUrl: "./modal.component.html",
 })
 export class ModalComponent implements OnInit {
+	@Input() errorMsg : any;
+	@Input() inputdisplay : any;
+	displayStyle = "none";
 constructor() {}
 
-ngOnInit() {}
+ngOnInit() {
+	this.displayStyle = this.inputdisplay;
+}
 
-displayStyle = "none";
+
 
 openPopup() {
 	this.displayStyle = "block";
